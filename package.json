@@ -1,0 +1,20 @@
+{
+  "name": "globe-gores",
+  "version": "1.0.0",
+  "description": "Draw globe gores.",
+  "license": "CC0",
+  "author": {
+    "name": "Joshua Tauberer",
+    "url": "https://razor.occams.info"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joshdata/globe-gores.git"
+  },
+  "dependencies": {
+    "ndjson-cli": "^0.3.0",
+    "shapefile": "^0.5.9",
+    "five-color-map": "*",
+    "proj4": "*"
+  }
+}
