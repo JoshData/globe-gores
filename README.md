@@ -5,7 +5,7 @@ The Node.js script in this repository can be used to draw globe gores, i.e. an [
 
 ![Map Gores](output.png)
 	
-[high res (16M)](output_large.png), [Natural Earth](http://www.naturalearthdata.com/downloads/) raster and vector data
+[high res (58M)](output_large.png), [Natural Earth](http://www.naturalearthdata.com/downloads/) raster and vector data
 
 ![Map Gores](output_blue.png)
 

@@ -232,4 +232,4 @@ draw_geojson("data/countries.json", ctx);
 //draw_geojson("data/lakes.json", ctx, "white");
 
 // Save.
-fs.writeFileSync('output.png', canvas.toBuffer());
+fs.writeFileSync(process.argv[6] || 'output.png', canvas.toBuffer());
