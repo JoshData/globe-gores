@@ -110,7 +110,23 @@ function draw_polygon(geom, label, color, ctx) {
 
 // Projection helpers.
 function projection(pt, gore_meridian) {
-  return proj4(projection_projstring(gore_meridian || 0), pt);
+  return proj4(
+  	// Although WGS84 is the Proj4 default, be explicit about the input projection
+  	// per http://www.naturalearthdata.com/features/.
+  	"+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs",
+
+  	// The map projection is defined above.
+  	projection_projstring(gore_meridian || 0)
+
+  	// Add this spherical coordinates trick. The Natural Earth raster data, but not the
+  	// vector data, appears to use spherical coordinates rather than actual WGS84 ellipsoid
+  	// coordinates. Since the datums differ, the latitude values shift around 45 degrees
+  	// and the two datasets won't line up. To correct this, apply this parameter to
+  	// make proj4 treat the (proper) ellipsoid coordinates in the vector data as if they
+  	// were spherical, which is wrong but it makes it compatible with the raster data.
+  	// (See https://trac.osgeo.org/proj/wiki/FAQ.)
+  	  + " +nadgrids=@null",
+  	pt);
 }
 var proj_h = projection([0,89.9999])[1]*2; // height of the map in projected units
 var proj_w = projection([179.9999,0])[0]*2; // width of the map in projected units
