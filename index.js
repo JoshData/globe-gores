@@ -21,12 +21,39 @@ var map_height = parseInt(process.argv[4]) || 512;
 var goreGutter = .075; // 7.5%
 
 function projection_projstring(prime_meridian) {
+  // Choose a projection:
   // laea: Lambert Azimuthal Equal Area
   // poly: American Polyconic - Would also be reasonable but polygons don't
   //       render quite right.
-  // TODO: This assumes perfectly spherical earth.
-  return '+proj=laea +lat_0=0 +lon_0=' + prime_meridian + ' +x_0=0 +y_0=0 +a=1 +b=1 +no_defs'
+  // The Earth is a little flat, so supply a proper minor axis radius.
+  var b = 1-1/298.257223563
+  return '+proj=laea +lat_0=0 +lon_0=' + prime_meridian + ' +x_0=0 +y_0=0 +a=1 +b=' + b + ' +no_defs'
 }
+
+// Projection helpers.
+function projection(pt, gore_meridian) {
+  return proj4(
+  	// Although WGS84 is the Proj4 default, be explicit about the input projection
+  	// per http://www.naturalearthdata.com/features/.
+  	"+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs",
+
+  	// The map projection is defined above.
+  	projection_projstring(gore_meridian || 0)
+
+  	// Add this spherical coordinates trick. The Natural Earth raster data, but not the
+  	// vector data, appears to use spherical coordinates rather than actual WGS84 ellipsoid
+  	// coordinates. Since the datums differ, the latitude values shift around 45 degrees
+  	// and the two datasets won't line up. To correct this, apply this parameter to
+  	// make proj4 treat the (proper) ellipsoid coordinates in the vector data as if they
+  	// were spherical, which is wrong but it makes it compatible with the raster data.
+  	// (See https://trac.osgeo.org/proj/wiki/FAQ.)
+  	  + " +nadgrids=@null",
+  	pt);
+}
+var proj_h = projection([0,90])[1]*2; // height of the map in projected units
+var proj_w = projection([179.9999,0])[0]*2; // width of the map in projected units
+var goreWidth = 360/numGores;
+var proj_gore_w = projection([goreWidth/2,0])[0]*2; // width of a single gore in projected units
 
 function draw_raster(image_file) {
   // Warp and draw a raster image in lat-long projection.
@@ -38,7 +65,11 @@ function draw_raster(image_file) {
       execSync('rm -f /tmp/reprojected.*');
       execSync('gdalwarp -multi -nomd'
         + ' -t_srs "' + projection_projstring(gore_meridian) + '"'
-        + ' -te -1 -1.41421356 1 1.41421356' // output extents, in projected units (half the world horizontally is enough to capture the gore), and [-1.4,1.4] vertically is the height of the prime meridian
+
+        // output extents, in projected units (half the world (-1 to 1) horizontally is enough to capture the gore),
+        // and [-sqrt(2),sqrt(2)] vertically is the height of the prime meridian.
+        + ' -te -1 ' + (-proj_h/2) + ' 1 ' + (proj_h/2)
+
         + ' -ts 0 ' + map_height // same resolution as output
         + ' -r bilinear ' // sligntly better sampling than the default
         + ' -wo SAMPLE_GRID=YES -wo SAMPLE_STEPS=' + (map_height**.5)*20 // fixes a discontinuity at the edges of the source image when the edge is a part of the gore
@@ -107,31 +138,6 @@ function draw_polygon(geom, label, color, ctx) {
     //ctx.fill();
   });
 }
-
-// Projection helpers.
-function projection(pt, gore_meridian) {
-  return proj4(
-  	// Although WGS84 is the Proj4 default, be explicit about the input projection
-  	// per http://www.naturalearthdata.com/features/.
-  	"+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs",
-
-  	// The map projection is defined above.
-  	projection_projstring(gore_meridian || 0)
-
-  	// Add this spherical coordinates trick. The Natural Earth raster data, but not the
-  	// vector data, appears to use spherical coordinates rather than actual WGS84 ellipsoid
-  	// coordinates. Since the datums differ, the latitude values shift around 45 degrees
-  	// and the two datasets won't line up. To correct this, apply this parameter to
-  	// make proj4 treat the (proper) ellipsoid coordinates in the vector data as if they
-  	// were spherical, which is wrong but it makes it compatible with the raster data.
-  	// (See https://trac.osgeo.org/proj/wiki/FAQ.)
-  	  + " +nadgrids=@null",
-  	pt);
-}
-var proj_h = projection([0,89.9999])[1]*2; // height of the map in projected units
-var proj_w = projection([179.9999,0])[0]*2; // width of the map in projected units
-var goreWidth = 360/numGores;
-var proj_gore_w = projection([goreWidth/2,0])[0]*2; // width of a single gore in projected units
 
 // Construct the output image with the correct dimensions, including a gutter
 // on all four sides.
