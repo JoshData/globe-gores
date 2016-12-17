@@ -40,12 +40,25 @@ function projection(pt, gore_meridian) {
   	// The map projection is defined above.
   	projection_projstring(gore_meridian || 0)
 
-  	// Add this spherical coordinates trick. The Natural Earth raster data, but not the
-  	// vector data, appears to use spherical coordinates rather than actual WGS84 ellipsoid
-  	// coordinates. Since the datums differ, the latitude values shift around 45 degrees
-  	// and the two datasets won't line up. To correct this, apply this parameter to
-  	// make proj4 treat the (proper) ellipsoid coordinates in the vector data as if they
-  	// were spherical, which is wrong but it makes it compatible with the raster data.
+  	// Add this spherical coordinates hack. There is something wrong in either the
+    // raster warping or vector projection. The output of gdalwarp does not line
+    // up with the projected vector data exactly, even when the source/target
+    // projections are identical. The latitude values shift/stretch around 45 degrees
+    // latitude slightly, which I've seen many times when there's a discrepancy in
+    // treating lat/long as on the ideal sphere or on a correct ellipsoid from the
+    // WGS84 datum. This hack fixes the problem by instructing proj4 to treat the
+    // WGS84 ellipsoid coordinates in the vector data as if they were actually
+  	// spherical coordinates. This is wrong, but it makes the raster and vector data
+    // line up. The Natural Earth raster image data lines up with the Natural Earth
+    // vector data perfectly, so the two datasets correctly have the same projection.
+    // Also, adding this hack to gdalwarp doesn't change the output, so we know
+    // gdalwarp isn't applying a WGS84=>spherical transformation. The problem is
+    // either 1) a gdalwarp bug, or 2) an error in the raster metadata causing gdalwarp
+    // to think the source is in spherical coordinates already, or 3) a combination
+    // of the source being in spherical coordinates already (an error in the Natural
+    // Earth metdata & documentation) *and* proj4 (but not gdalwarp) incorrectly
+    // applying a WGS84=>spherical transformation. I have no way to know which is
+    // the problem.
   	// (See https://trac.osgeo.org/proj/wiki/FAQ.)
   	  + " +nadgrids=@null",
   	pt);
