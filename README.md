@@ -3,13 +3,21 @@ Map Gores
 
 The Node.js script in this repository can be used to draw globe gores, i.e. an [interrupted map](http://www.progonos.com/furuti/MapProj/Normal/ProjInt/projInt.html) made out of pieces that could be pasted onto the surface of a sphere.
 
-![Map Gores](output.png)
+Here is a composite of gores from multiple source raster/vector sources:
+
+![Map Gores](output/combined_1600.png)
+
+From left to right:
+
+* [CRU TS3.24.01 (Jan. 1901- Dec. 2015)](http://catalogue.ceda.ac.uk/uuid/3df7562727314bab963282e6a0284f24), mean daily temperatures 2011-2015, Centre for Environmental Data Analysis, University of East Anglia Climatic Research Unit (Harris, I.C.; Jones, P.D. (2017)). (The data is used under a license -- please retain the attribution above if you reuse the image.) With [Natural Earth](http://www.naturalearthdata.com/downloads/) country vector outlines.
+
+* [NASA Goddard Space Flight Center - Blue Marble (2002, land surface, ocean color, sea ice and clouds)](http://visibleearth.nasa.gov/view.php?id=57735)
 	
-[high res (58M)](output_large.png), [Natural Earth](http://www.naturalearthdata.com/downloads/) raster and vector data
+* [NASA Earth Observatory - Night Lights (2012)](http://visibleearth.nasa.gov/view.php?id=79765)
 
-![Map Gores](output_blue.png)
+* [NASA Earth Observatory - Blue Marble Next Generation (December 2004) with Topography and Bathymetry](http://visibleearth.nasa.gov/view.php?id=73909)
 
-[high res (7M)](output_blue_large.png), [Blue Marble/NASA](http://neo.sci.gsfc.nasa.gov/view.php?datasetId=BlueMarbleNG-TB) raster and [Natural Earth](http://www.naturalearthdata.com/downloads/) country vector data
+* [Natural Earth - Gray Earth with Shaded Relief, Hypsography, Ocean Bottom, and Drainages](http://www.naturalearthdata.com/downloads/10m-raster-data/10m-gray-earth/)
 
 Mathematics
 -----------
@@ -35,10 +43,11 @@ The gore is created by using:
 
 * `gdalwarp` to draw a base layer from a GeoTIFF raster image
 * vector data in a GeoJSON file
+* the Cario graphics drawing library, which creates high-quality raster images
 
 To run:
 
-Install the node-canvas dependencies for your platform:
+Install the node-canvas (a Cairo wrapper) dependencies for your platform:
 
 	https://github.com/Automattic/node-canvas
 
@@ -57,3 +66,22 @@ Generate the map:
 
 Edit the parameters at the top of index.js for a larger map or to change the number of gores.
 
+GeoTIFF Sources
+---------------
+
+* [Natural Earth](http://www.naturalearthdata.com/downloads/) (shaded relief; up to 21,600x10,800)
+* [Visible Earth (NASA)](http://visibleearth.nasa.gov/) ([blue marble](http://visibleearth.nasa.gov/view_cat.php?categoryID=1484), [night lights](http://visibleearth.nasa.gov/view.php?id=79765); up to 54,000x27,000)
+
+Weather Data
+------------
+
+The U.S. National Weather Service's Global Forecast System (GFS) offers real-time(-ish) global weather data through [NOMADS](http://nomads.ncep.noaa.gov/) in the GRIB2 format. The author of https://github.com/cambecc/earth figured out how to pull a slice of the data from the 1-degree resolution dataset.
+
+	YYYYMMDD=$(date --iso-8601=date | sed s/-//g)
+	curl "http://nomads.ncep.noaa.gov/cgi-bin/filter_gfs.pl?file=gfs.t00z.pgrb2.1p00.f000&lev_10_m_above_ground=on&var_UGRD=on&var_VGRD=on&dir=%2Fgfs.${YYYYMMDD}00" -o gfs.t00z.pgrb2.1p00.f000
+
+
+Other Data Sources
+------------------
+
+See https://github.com/cambecc/earth for how to get global weather data.

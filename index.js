@@ -77,6 +77,7 @@ function draw_raster(image_file) {
       // Re-project the raster data from lat-long to our map projection.
       execSync('rm -f /tmp/reprojected.*');
       execSync('gdalwarp -multi -nomd'
+        + ' -s_srs "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"'
         + ' -t_srs "' + projection_projstring(gore_meridian) + '"'
 
         // output extents, in projected units (half the world (-1 to 1) horizontally is enough to capture the gore),
@@ -143,7 +144,7 @@ function draw_polygon(geom, label, color, ctx) {
     })
 
     // Stroke.
-    ctx.strokeStyle = 'rgba(150,150,150,0.5)';
+    ctx.strokeStyle = 'rgba(75,75,75,0.5)';
     ctx.stroke();
 
     // doesnt work because some polygons cause the whole image to be filled
@@ -238,11 +239,12 @@ function drawGores(func) {
 }
 
 // Draw a raster base layer.
-draw_raster(process.argv[5] || "HYP_50M_SR_W/HYP_50M_SR_W.tif")
+if (process.argv[5])
+  draw_raster(process.argv[5])
 
 // Draw vector layer(s) on top.
-draw_geojson("data/countries.json", ctx);
-//draw_geojson("data/lakes.json", ctx, "white");
+if (process.argv[6])
+  draw_geojson(process.argv[6], ctx);
 
 // Save.
-fs.writeFileSync(process.argv[6] || 'output.png', canvas.toBuffer());
+fs.writeFileSync(process.argv[7] || 'output.png', canvas.toBuffer());
