@@ -1,6 +1,7 @@
 var fs = require("fs");
 var Canvas = require('canvas');
 var proj4 = require('proj4');
+var turf = require('turf');
 var fiveColorMap = require('five-color-map');
 var execSync = require('child_process').execSync;
 
@@ -101,7 +102,7 @@ function draw_raster(image_file) {
   })
 }
 
-function draw_geojson(fn, ctx, color) {
+function draw_geojson(fn, ctx, style) {
   // Draws features in a GeoJSON file.
 
   // Read the file.
@@ -109,48 +110,178 @@ function draw_geojson(fn, ctx, color) {
   if (geo.type != "FeatureCollection") throw "hmm";
   
   // assign colors to polygons that are consistent accross gores
-  // unfortunately something is causing some of the polygons to
-  // fill the whole image
-  //if (!color)
-  //  geo = fiveColorMap(geo);
+  // so that adjacent polygons don't have the same color
+  if (!style.fillStyle)
+    geo = fiveColorMap(geo);
+
+  var refill = {
+    '#fbb4ae': 'rgba(255,255,0, .3)',
+    '#b3cde3': 'rgba(190,255,40,.25)',
+    '#ccebc5': 'rgba(225,225,40,.15)',
+    '#decbe4': 'rgba(220,225,10,.3)',
+    '#fed9a6': 'rgba(255,220,10,.3)'
+  };
   
   drawGores(function(gore_meridian) {
     console.log(fn, gore_meridian, "...");
     geo.features.forEach(function(feature) {
-      draw_geometry(
-        feature.geometry,
-        feature.properties.name,
-        color || feature.properties.fill,
-        ctx);
-    });
+        draw_geometry(
+          feature,
+          {
+            strokeStyle: 'rgba(220,220,220,.25)' || style.strokeStyle,
+            fillStyle: refill[feature.properties.fill] || style.fillStyle,
+          },
+          ctx);
+        draw_feature_label(feature, feature.properties.abbrev || feature.properties.name, style, ctx);
+      });
   })
 }
 
-function draw_geometry(geom, label, color, ctx) {
-  if (geom.type == "MultiPolygon")
-    geom.coordinates.forEach(function(poly) { draw_polygon(poly, label, color, ctx); })
-  else if (geom.type == "Polygon")
-    draw_polygon(geom.coordinates, label, color, ctx);
+function draw_geometry(feature, style, ctx) {
+  if (feature.geometry.type == "MultiPolygon")
+    feature.geometry.coordinates.forEach(function(poly) { draw_polygon(turf.polygon(poly), style, ctx); })
+  else if (feature.geometry.type == "Polygon")
+    draw_polygon(feature, style, ctx);
   else
     throw geom.type;
 }
 
-function draw_polygon(geom, label, color, ctx) {
-  geom.forEach(function(ring) {
+function draw_feature_label(feature, label, style, ctx) {
+  // Draw label at the center of the largest polygon
+  // (i.e. draw label once for the whole geometry).
+
+  var poly = null;
+  var poly_area = 0;
+  function find_largest_polygon(geom) {
+    if (geom.type == "MultiPolygon")
+      return geom.coordinates.forEach(function(poly) {
+        find_largest_polygon({
+          "type": "Polygon",
+          "coordinates": poly
+        }) });
+    if (geom.type != "Polygon")
+      throw geom.type;
+
+    var a = turf.area(geom);
+    if (a < 1000000000) return; // don't label really small features
+    if (a > poly_area) {
+      poly = geom;
+      poly_area = a;
+    }
+  }
+  find_largest_polygon(feature.geometry);
+  if (!poly) return;
+
+  // Buffer the labels to be drawn later.
+  // TODO: Better label positioning than centroid.
+  // TODO: Maybe better to run turf on projected coordinates rather than lat/lng?
+  var pt_src = turf.pointOnSurface(poly).geometry.coordinates;
+  var pt = ctx.proj(pt_src);
+  var pt0 = ctx.proj([pt_src[0] - goreWidth/50, pt_src[1]]);
+  var pt1 = ctx.proj([pt_src[0] + goreWidth/50, pt_src[1]]);
+  ctx.font = '20px Gentium'; // TODO see below
+  var te = ctx.measureText(label);
+  pt[0] -= te.width/2;
+  pt[1] += te.actualBoundingBoxAscent/2;
+  ctx.labels.push({
+    text: label,
+    box: [ pt, // draw origin
+      [pt[0]+te.width+.5, pt[1]], // add buffer to avoid labels exactly next to each other
+      [pt[0]+te.width+.5, pt[1]+te.actualBoundingBoxAscent+te.actualBoundingBoxDescent+.5],
+      [pt[0], pt[1]+te.actualBoundingBoxAscent+te.actualBoundingBoxDescent+.5],
+      pt ],
+
+    // Compute the rotation of the projection at this location, so that the label
+    // can be parallel to the lines of latitude there, which helps indicate where
+    // north is.
+    rotation: Math.atan2(pt1[1]-pt0[1], pt1[0]-pt0[0]),
+    priority: -poly_area
+  })
+}
+
+function draw_polygon(feature, style, ctx) {
+  // After projecting, the polygon may have kinks. While cairo draws the stroke
+  // correctly in that case, it draws the fill incorrectly and flood-fills the
+  // whole clip area.
+
+  // Skip really tiny polygons, which turn out to have some problems.
+  var area = turf.area(feature);
+  if (area < 1000000000) return;
+
+  // Project the points...
+  feature = turf.polygon(feature.geometry.coordinates.map(function(ring) {
+    return ring.map(function(pt) { return ctx.proj(pt) });
+  }));
+
+  // Check for kinks.
+  var kinks = turf.kinks(feature);
+  if (kinks.features.length) {
+    // There are kinks. Removing them turns out to be hard. The kinks occur all over
+    // the map. Plausible ways to remove them -- simplepolygon and turf.intersect
+    // with the clipping region of the gore -- all have problems.
+    //
+    // turf.simplify alone fixes it in some cases, and the remaining polygons are
+    // minor and we can skip drawing them, I think.
+    //console.log(style.label, area);
+    feature = turf.simplify(feature);
+    kinks = turf.kinks(feature);
+    if (kinks.features.length) {
+      console.log("skipping a polygon in", style.label)
+      return;
+    }
+  }
+
+  draw_polygon2(feature, style, ctx);
+}
+
+function draw_polygon2(feature, style, ctx) {
+  // We can't draw a polygon directly because if it has inner rings,
+  // those should be holes. turf.tesselate will give us back an array
+  // of triangles that we can draw. It's quite expensive to draw
+  // tiny triangles with Cairo unfortunately, so we only use it when
+  // necessary.
+
+  function fill_ring(ring) {
     // Construct the path.
     ctx.beginPath();
     ring.forEach(function(pt) {
-      ctx.lineToPt(pt);
+      ctx.lineTo(pt[0], pt[1]);
+    })
+
+    // Fill.
+    if (style.fillStyle) {
+      // TODO: Inner rings
+      ctx.fillStyle = style.fillStyle;
+      ctx.fill();
+    }
+  }
+
+  function outline_ring(ring) {
+    // Construct the path.
+    ctx.beginPath();
+    ring.forEach(function(pt) {
+      ctx.lineTo(pt[0], pt[1]);
     })
 
     // Stroke.
-    ctx.strokeStyle = 'rgba(75,75,75,0.5)';
-    ctx.stroke();
+    if (style.strokeStyle) {
+      ctx.strokeStyle = style.strokeStyle;
+      ctx.stroke();
+    }
+  }
 
-    // doesnt work because some polygons cause the whole image to be filled
-    //ctx.fillStyle = 'black';
-    //ctx.fill();
-  });
+  if (feature.geometry.coordinates.length == 1) {
+    // There is only an outer ring, so no need to tesselate.
+    fill_ring(feature.geometry.coordinates[0]);
+  } else {
+    // There are inner rings, so tesselate.
+    turf.tesselate(feature).features.forEach(function(geom) {
+      fill_ring(geom.geometry.coordinates[0]);
+    });
+  }
+
+  // Outline -- cannot be based on tesselation.
+  outline_ring(feature.geometry.coordinates[0]);
 }
 
 // Construct the output image with the correct dimensions, including a gutter
@@ -163,14 +294,6 @@ var ctx = canvas.getContext('2d');
 
 ctx.proj = function(pt) {
   // Project from lat-long to pixels.
-
-  /*
-  // Clip because projections don't like edges.
-  if (pt[0] <= -359.999) pt[0] =-359.999;
-  if (pt[0] >=  359.999) pt[0] = 359.999;
-  if (pt[1] <= -89.999)  pt[1] = -89.999;
-  if (pt[1] >=  89.999)  pt[1] =  89.999;
-  */
 
   // Project into map coordinates.
   pt = projection(pt, this.gore_meridian);
@@ -196,15 +319,12 @@ ctx.lineToPt = function(pt) {
   this.lineTo(pt[0], pt[1]);
 }
 
-/*ctx.font = '30px Impact';
-ctx.rotate(.1);
-ctx.fillText("Awesome!", 50, 100);
-var te = ctx.measureText('Awesome!');*/
-
 function drawGores(func) {
   // Calls func(gore_index) for each gore, setting a clipping region
   // before each call.
   for (var gore_index = 0; gore_index < numGores; gore_index++) {
+    //if (gore_index != 4) continue;
+
     // Save the unclipped context.
     ctx.save();
 
@@ -214,12 +334,17 @@ function drawGores(func) {
 
     // Create a clipping region to only draw content within the gore.
     // The gore is the region between the meridians at [-goreWidth/2,goreWidth/2].
+    ctx.clip_region = [];
     var goreSteps = canvas.height;
+    for (var i = 0; i <= goreSteps; i++)
+      ctx.clip_region.push([ctx.gore_meridian-goreWidth/2, -90 + i*180/goreSteps]);
+    for (var i = 0; i <= goreSteps; i++)
+      ctx.clip_region.push([ctx.gore_meridian+goreWidth/2,  90 - i*180/goreSteps]);
+    ctx.clip_region.push(ctx.clip_region[0]); // make it a valid linear ring
+
+    // Set the path.
     ctx.beginPath();
-    for (var i = 0; i <= goreSteps; i++)
-      ctx.lineToPt([ctx.gore_meridian-goreWidth/2, -90 + i*180/goreSteps]);
-    for (var i = 0; i <= goreSteps; i++)
-      ctx.lineToPt([ctx.gore_meridian+goreWidth/2,  90 - i*180/goreSteps]);
+    ctx.clip_region.forEach(function(pt) { ctx.lineToPt(pt); });
     ctx.closePath();
 
     // Draw gore outline. (This function may be called multiple times so
@@ -227,11 +352,37 @@ function drawGores(func) {
     ctx.strokeStyle = 'rgba(200,200,200,1)';
     ctx.stroke();
 
-    // Clip the drawing to that outline.
+    // Clip the drawing to that path.
     ctx.clip();
 
     // Draw the map.
+    ctx.labels = [];
     func(ctx.gore_meridian);
+
+    // Draw the buffered labels.
+    var drawn_labels = [];
+    ctx.labels.sort(function(a, b) { return a.priority - b.priority; })
+    ctx.labels.forEach(function(label) {
+      // Skip if it would intersect with an existing label.
+      var bad = false;
+      drawn_labels.forEach(function(drawn_label) {
+        if (turf.intersect(
+          turf.polygon([drawn_label.box]),
+          turf.polygon([label.box]))
+          != null)
+          bad = true;
+      });
+      if (bad) return;
+
+      ctx.save();
+      ctx.font = '20px Gentium'; // TODO see above
+      ctx.fillStyle = 'rgba(10,10,10,1)';
+      ctx.translate(label.box[0][0], label.box[0][1])
+      ctx.rotate(label.rotation); // this messes up the bbox but whatever
+      ctx.fillText(label.text, 0,0);
+      ctx.restore();
+      drawn_labels.push(label);
+    })
 
     // Clear the clipping region for the next iteration.
     ctx.restore();
@@ -244,7 +395,7 @@ if (process.argv[5])
 
 // Draw vector layer(s) on top.
 if (process.argv[6])
-  draw_geojson(process.argv[6], ctx);
+  draw_geojson(process.argv[6], ctx, {});
 
 // Save.
 fs.writeFileSync(process.argv[7] || 'output.png', canvas.toBuffer());
