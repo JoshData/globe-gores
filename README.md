@@ -22,19 +22,46 @@ From left to right:
 Mathematics
 -----------
 
-The gores are made from the center region of the [Lambert Azimuthal Equal Area projection](https://en.wikipedia.org/wiki/Lambert_azimuthal_equal-area_projection) bounded by symmetric lines of longitude:
+The gores are made from the center diamond-y region of the [Lambert Azimuthal Equal Area](https://en.wikipedia.org/wiki/Lambert_azimuthal_equal-area_projection) projection. Each gore is made by rotating the projection around the earth so that a different part is in view for each gore.
 
-![Lambert Azimuthal Equal Area projection](https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Lambert_azimuthal_equal-area_projection_SW.jpg/300px-Lambert_azimuthal_equal-area_projection_SW.jpg)
+The selection of projection was based on these goals:
 
-I chose this projection because:
+* The area bounded by symmetric lines of longitude around the central meridian must be a shape that looks like a [globe gore](https://en.wikipedia.org/wiki/Gore_%28segment%29). A projection like the normal Mercator would produce rectangular strips when cut up because lines of longitude are parallel, and that won't fit on a sphere.
 
-* The area bounded by symmetric lines of longitude around the central meridian is a shape that looks like a [globe gore](https://en.wikipedia.org/wiki/Gore_%28segment%29). Cylindrical projections like Mercator wouldn't work --- they would produce rectangular strips. Other plausible projections include [sinusoidal](https://en.wikipedia.org/wiki/Sinusoidal_projection) and [polyconic](https://en.wikipedia.org/wiki/Polyconic_projection).
-* It is an equal-area projection, which means the map doesn't give more area to some parts of the world than others --- and that's just fair. (Sinusoidal would also work, but not polyconic.)
-* It's roughly shape-preserving, e.g. the lines of latitude intersect the lines of longitude at very close to right angles near the center line of longitude, which means that if the gores were actually placed on a sphere there wouldn't be abrupt changes where the gores meet. (Sinusoidal is less shape-preserving, polyconic may be more.)
+* The projection should be conformal. A conformal projection preserves shape. That's important because a non-conformal projection will create abrupt distortions where two gores come together, because the distortion at the edge of one gore won't be the same as the distortion on the adjancent edge of the next gore.
 
-(For real globe gores, shape-preserving is probably most valuable so there aren't abrupt angles at the intersections of the gores. Polygonic might be more shape-preserving, and might ultimately fit a sphere better. But since you probably won't be putting these gores on an actual globe, prioritizing equal-area makes more sense to me, and I had trouble using polygonic in practice. For more on valuable aspects of projections for globe gores, see [https://www.mapthematics.com/Downloads/Gores.pdf](https://www.mapthematics.com/Downloads/Gores.pdf).)
+* The projection should be equal-area, meaning all parts of the earth are given an equal amount of space in the map. Without this property, the map/globe will stretch some parts of the earth and shrink others (like how Mercator stretches the poles and shrinks things at the equator).
 
-Each gore is created by making a separate projection centered at a different line of longitude, rotating around the earth.
+A map can't be both conformal and equal area, so a projection that is almost conformal and doesn't have too much distortion in scale is probably best. And no flat print-out will lay perfectly on a sphere. There will be some distortion as the material is stretched to fit on a sphere. So perfect conformality when projected onto a rectangular image will turn into non-conformality on a sphere anyway.
+
+The contenders are:
+
+### [Transverse Mercator](https://en.wikipedia.org/wiki/Transverse_Mercator_projection)
+
+![Transverse Mercator](https://upload.wikimedia.org/wikipedia/commons/1/15/MercTranSph.png)
+
+Pro: Conformal. Con: Distortion in size increases as you go horizontally away from the central meridian, but since gores aren't very wide the distortion is mostly in the parts of the map that don't fall in the center part that makes a gore.
+
+### [Lambert Azimuthal Equal Area projection](https://en.wikipedia.org/wiki/Lambert_azimuthal_equal-area_projection)
+
+![Lambert Azimuthal Equal Area projection](https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Lambert_azimuthal_equal-area_projection_SW.jpg/800px-Lambert_azimuthal_equal-area_projection_SW.jpg)
+
+Pro: Equal-area. Con: Distortion in shape increases as you go horizontally away from the central meridian, but there is relatively little distortion close to the central meridian. If we're making flat art and not an actual globe, so we won't notice non-conformality, this perhaps produces the most equitable map.
+
+### [Sinusoidal](https://en.wikipedia.org/wiki/Sinusoidal_projection)
+
+![Sinusoidal](https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Sinusoidal_projection_SW.jpg/1920px-Sinusoidal_projection_SW.jpg)
+
+Pro: Equal-area. Con: Large distortions in shape near the center (less distortion away from the center, but we don't care about that).
+
+### [Polyconic](https://en.wikipedia.org/wiki/Polyconic_projection)
+
+![Polyconic](https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/American_Polyconic_projection.jpg/1024px-American_Polyconic_projection.jpg)
+
+Neither equal-area nor conformal, but pretty close to both. Plausibly the best choice for an actual gore by taking a middle road.
+
+
+For more on valuable aspects of projections for globe gores, see [https://www.mapthematics.com/Downloads/Gores.pdf](https://www.mapthematics.com/Downloads/Gores.pdf).
 
 Implementation
 --------------

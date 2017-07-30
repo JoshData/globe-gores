@@ -22,13 +22,13 @@ var map_height = parseInt(process.argv[4]) || 512;
 var goreGutter = .075; // 7.5%
 
 function projection_projstring(prime_meridian) {
-  // Choose a projection:
+  // Transverse Mercator projection.
+  // Also reasonable:
   // laea: Lambert Azimuthal Equal Area
-  // poly: American Polyconic - Would also be reasonable but polygons don't
-  //       render quite right.
+  // poly: American Polyconic - polygons don't render quite right
   // The Earth is a little flat, so supply a proper minor axis radius.
   var b = 1-1/298.257223563
-  return '+proj=laea +lat_0=0 +lon_0=' + prime_meridian + ' +x_0=0 +y_0=0 +a=1 +b=' + b + ' +no_defs'
+  return '+proj=tmerc +lat_0=0 +lon_0=' + prime_meridian + ' +x_0=0 +y_0=0 +a=1 +b=' + b + ' +no_defs'
 }
 
 // Projection helpers.
@@ -75,24 +75,29 @@ function draw_raster(image_file) {
   drawGores(function(gore_meridian) {
       console.log(image_file, gore_meridian, "...");
 
+      function run(cmd) {
+      	console.log(cmd);
+      	execSync(cmd);
+      	console.log("   ok")
+      }
+
       // Re-project the raster data from lat-long to our map projection.
-      execSync('rm -f /tmp/reprojected.*');
-      execSync('gdalwarp -multi -nomd'
+      run('rm -f /tmp/reprojected.*');
+      run('gdalwarp -multi -nomd'
         + ' -s_srs "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"'
         + ' -t_srs "' + projection_projstring(gore_meridian) + '"'
 
-        // output extents, in projected units (half the world (-1 to 1) horizontally is enough to capture the gore),
-        // and [-sqrt(2),sqrt(2)] vertically is the height of the prime meridian.
-        + ' -te -1 ' + (-proj_h/2) + ' 1 ' + (proj_h/2)
+        // output extents, in projected units
+        + ' -te ' + (-proj_gore_w/2) + ' ' + (-proj_h/2) + ' ' + (proj_gore_w/2) + ' ' + (proj_h/2)
 
         + ' -ts 0 ' + map_height // same resolution as output
-        + ' -r bilinear ' // sligntly better sampling than the default
-        + ' -wo SAMPLE_GRID=YES -wo SAMPLE_STEPS=' + (map_height**.5)*20 // fixes a discontinuity at the edges of the source image when the edge is a part of the gore
+        //+ ' -r bilinear ' // sligntly better sampling than the default
+        //+ ' -wo SAMPLE_GRID=YES -wo SAMPLE_STEPS=' + (map_height**.5)*20 // fixes a discontinuity at the edges of the source image when the edge is a part of the gore
         + ' ' + image_file
         + ' /tmp/reprojected.tiff');
 
       // gdalwarp can't emit PNG and PNG is most convenient for Cairo to read.
-      execSync('convert -quiet /tmp/reprojected.tiff /tmp/reprojected.png');
+      run('convert -quiet /tmp/reprojected.tiff /tmp/reprojected.png');
 
       // Draw the raster data. It will be clipped to the gore clipping area.
       img = new Canvas.Image;
